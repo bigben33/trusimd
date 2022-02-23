@@ -1,0 +1,156 @@
+#!/bin/bash
+
+# -----------------------------------------------------------------------------
+# Default values
+
+DIRNAME=`dirname $0`
+ROOT=`realpath ${DIRNAME}`
+BUILD=`realpath ${PWD}`
+PREFIX=/usr
+CXX=${CXX:-c++}
+CXXFLAGS=${CXXFLAGS:--O3 -g -Wall -Wextra -pedantic}
+LDFLAGS=${LDFLAGS}
+NO_EXCEPTIONS="NO"
+WITH_LLVM="DEFAULT"
+WITH_OPENCL="DEFAULT"
+WITH_CUDA="/usr/local/cuda"
+
+VAR_LIST="ROOT BUILD PREFIX CXX CXXFLAGS LDFLAGS"
+
+# -----------------------------------------------------------------------------
+# Look for replacements
+
+for a in "$@"; do
+  case $a in
+    CXX=*|CXXFLAGS=*|LDFLAGS=*)
+      eval $a
+    ;;
+    --prefix=*)
+      PREFIX="`echo $a | cut -c 10-`"
+    ;;
+    --no-exceptions)
+      NO_EXCEPTIONS="YES"
+    ;;
+    --with-llvm=*)
+      WITH_LLVM="`echo $a | cut -c 13-`"
+    ;;
+    --without-llvm)
+      WITH_LLVM=""
+    ;;
+    --with-opencl=*)
+      WITH_OPENCL="`echo $a | cut -c 15-`"
+    ;;
+    --without-opencl)
+      WITH_OPENCL=""
+    ;;
+    --with-cuda=*)
+      WITH_CUDA="`echo $a | cut -c 13-`"
+    ;;
+    --without-cuda)
+      WITH_CUDA=""
+    ;;
+    *)
+      echo "$0: ERROR: unknown argument: $a"
+      exit 1
+    ;;
+  esac
+done
+
+if [ "${NO_EXCEPTIONS}" = "YES" ]; then
+  CXXFLAGS="${CXXFLAGS} -DNO_EXCEPTIONS -fno-exceptions"
+fi
+
+get_cxxflags() {
+  if [ "${1}" = "" ]; then
+    echo ""
+  elif [ "${1}" = "DEFAULT" ]; then
+    echo "-DWITH_${2}"
+  else
+    echo "-DWITH_${2} -I${1}/include"
+  fi
+}
+
+get_ldflags() {
+  if [ "${1}" = "" ]; then
+    echo ""
+    exit 0
+  fi
+  IN_SYS_DIR="no"
+
+  # First get list of dirs to search in
+  LIST_DIRS="`echo ${LD_LIBRARY_PATH} | tr ':' ' '`"
+  if [ "${1}" = "DEFAULT" ]; then
+    IN_SYS_DIR="yes"
+    if [ -f "/etc/ld.so.conf" ]; then
+      for input in /etc/ld.so.conf `ls -rt /etc/ld.so.conf.d/*.conf`; do
+        LIST_DIRS="${LIST_DIRS} `grep -v '#' <${input} | \
+                                 grep -v 'include ' | tr '\n' ' '`"
+      done
+    fi
+  else
+    LIST_DIRS="${LIST_DIRS} ${1} ${1}/lib ${1}/lib64"
+  fi
+
+  # Find the first lib$1*.so in the list of directories
+  shift
+  while [ "${1}" != "" ]; do
+    for d in ${LIST_DIRS}; do
+      if [ ! -d ${d} ]; then
+        continue
+      fi
+      res=`find -L ${d} -maxdepth 1 -iregex '.*'"lib${1}"'[-0-9_.]*\.so' | \
+           sort -V | tail -n 1`
+      if [ "${res}" != "" ]; then
+        break
+      fi
+    done
+    if [ "${IN_SYS_DIR}" = "yes" ]; then
+      echo "-l`basename ${res} .so | cut -c 4-`"
+    else
+      D="`dirname ${res}`"
+      printf -- "-L${D} -Wl,-rpath=${D} -l`basename ${res} .so | cut -c 4-` "
+    fi
+    shift
+  done
+  echo
+}
+
+CXXFLAGS="${CXXFLAGS} `get_cxxflags "${WITH_LLVM}" LLVM`"
+LDFLAGS="${LDFLAGS} `get_ldflags "${WITH_LLVM}" LLVM`"
+
+CXXFLAGS="${CXXFLAGS} `get_cxxflags "${WITH_OPENCL}" OPENCL`"
+LDFLAGS="${LDFLAGS} `get_ldflags "${WITH_OPENCL}" OPENCL`"
+
+CXXFLAGS="${CXXFLAGS} `get_cxxflags "${WITH_CUDA}" CUDA`"
+LDFLAGS="${LDFLAGS} `get_ldflags "${WITH_CUDA}" CUDART NVRTC`"
+if [ "${WITH_CUDA}" != "" ]; then
+  LDFLAGS="${LDFLAGS} `get_ldflags "${WITH_CUDA}/lib64/stubs" CUDA`"
+fi
+
+# -----------------------------------------------------------------------------
+# Print for debugging
+
+for v in ${VAR_LIST}; do
+  eval "val=`echo \$\{${v}\}`"
+  echo "-- ${v} = ${val}"
+done
+
+# -----------------------------------------------------------------------------
+# Actually write Makefile
+
+echo "# Makefile generated on `date`"      >Makefile
+echo "# Command line for generation was:" >>Makefile
+echo "#"                                  >>Makefile
+echo "#     $0 $@"                        >>Makefile
+echo "#"                                  >>Makefile
+echo                                      >>Makefile
+
+nb_lines=1
+for v in ${VAR_LIST}; do
+  eval "val=`echo \$\{${v}\}`"
+  echo "${v} = ${val}" >>Makefile
+  nb_lines=`expr ${nb_lines} + 1`
+done
+
+sed -n "${nb_lines},\$p" >>Makefile <${ROOT}/Makefile
+
