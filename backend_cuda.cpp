@@ -1,4 +1,5 @@
 #ifdef WITH_CUDA
+#include <cuda_runtime_api.h>
 #include <cuda_runtime.h>
 #include <nvrtc.h>
 #include <cuda.h>
@@ -68,14 +69,18 @@ static inline const char *cuda_strerror(void) {
       return "CUDA_ERROR_PROFILER_ALREADY_STARTED";
     case CUDA_ERROR_PROFILER_ALREADY_STOPPED:
       return "CUDA_ERROR_PROFILER_ALREADY_STOPPED";
+#ifdef CUDA_ERROR_STUB_LIBRARY
     case CUDA_ERROR_STUB_LIBRARY:
       return "CUDA_ERROR_STUB_LIBRARY";
+#endif
     case CUDA_ERROR_NO_DEVICE:
       return "CUDA_ERROR_NO_DEVICE";
     case CUDA_ERROR_INVALID_DEVICE:
       return "CUDA_ERROR_INVALID_DEVICE";
+#ifdef CUDA_ERROR_DEVICE_NOT_LICENSED
     case CUDA_ERROR_DEVICE_NOT_LICENSED:
       return "CUDA_ERROR_DEVICE_NOT_LICENSED";
+#endif
     case CUDA_ERROR_INVALID_IMAGE:
       return "CUDA_ERROR_INVALID_IMAGE";
     case CUDA_ERROR_INVALID_CONTEXT:
@@ -116,12 +121,18 @@ static inline const char *cuda_strerror(void) {
       return "CUDA_ERROR_NVLINK_UNCORRECTABLE";
     case CUDA_ERROR_JIT_COMPILER_NOT_FOUND:
       return "CUDA_ERROR_JIT_COMPILER_NOT_FOUND";
+#ifdef CUDA_ERROR_UNSUPPORTED_PTX_VERSION
     case CUDA_ERROR_UNSUPPORTED_PTX_VERSION:
       return "CUDA_ERROR_UNSUPPORTED_PTX_VERSION";
+#endif
+#ifdef CUDA_ERROR_JIT_COMPILATION_DISABLED
     case CUDA_ERROR_JIT_COMPILATION_DISABLED:
       return "CUDA_ERROR_JIT_COMPILATION_DISABLED";
+#endif
+#ifdef CUDA_ERROR_UNSUPPORTED_EXEC_AFFINITY
     case CUDA_ERROR_UNSUPPORTED_EXEC_AFFINITY:
       return "CUDA_ERROR_UNSUPPORTED_EXEC_AFFINITY";
+#endif
     case CUDA_ERROR_INVALID_SOURCE:
       return "CUDA_ERROR_INVALID_SOURCE";
     case CUDA_ERROR_FILE_NOT_FOUND:
@@ -188,16 +199,26 @@ static inline const char *cuda_strerror(void) {
       return "CUDA_ERROR_SYSTEM_DRIVER_MISMATCH";
     case CUDA_ERROR_COMPAT_NOT_SUPPORTED_ON_DEVICE:
       return "CUDA_ERROR_COMPAT_NOT_SUPPORTED_ON_DEVICE";
+#ifdef CUDA_ERROR_MPS_CONNECTION_FAILED
     case CUDA_ERROR_MPS_CONNECTION_FAILED:
       return "CUDA_ERROR_MPS_CONNECTION_FAILED";
+#endif
+#ifdef CUDA_ERROR_MPS_RPC_FAILURE
     case CUDA_ERROR_MPS_RPC_FAILURE:
       return "CUDA_ERROR_MPS_RPC_FAILURE";
+#endif
+#ifdef CUDA_ERROR_MPS_SERVER_NOT_READY
     case CUDA_ERROR_MPS_SERVER_NOT_READY:
       return "CUDA_ERROR_MPS_SERVER_NOT_READY";
+#endif
+#ifdef CUDA_ERROR_MPS_MAX_CLIENTS_REACHED
     case CUDA_ERROR_MPS_MAX_CLIENTS_REACHED:
       return "CUDA_ERROR_MPS_MAX_CLIENTS_REACHED";
+#endif
+#ifdef CUDA_ERROR_MPS_MAX_CONNECTIONS_REACHED
     case CUDA_ERROR_MPS_MAX_CONNECTIONS_REACHED:
       return "CUDA_ERROR_MPS_MAX_CONNECTIONS_REACHED";
+#endif
     case CUDA_ERROR_STREAM_CAPTURE_UNSUPPORTED:
       return "CUDA_ERROR_STREAM_CAPTURE_UNSUPPORTED";
     case CUDA_ERROR_STREAM_CAPTURE_INVALIDATED:
@@ -220,8 +241,10 @@ static inline const char *cuda_strerror(void) {
       return "CUDA_ERROR_TIMEOUT";
     case CUDA_ERROR_GRAPH_EXEC_UPDATE_FAILURE:
       return "CUDA_ERROR_GRAPH_EXEC_UPDATE_FAILURE";
+#ifdef CUDA_ERROR_EXTERNAL_DEVICE
     case CUDA_ERROR_EXTERNAL_DEVICE:
       return "CUDA_ERROR_EXTERNAL_DEVICE";
+#endif
     case CUDA_ERROR_UNKNOWN:
       return "CUDA_ERROR_UNKNOWN";
     default: return "Unknown CU error";
@@ -256,13 +279,18 @@ static inline int cuda_retrieve_defaults(cudaStream_t *s,
 
 static inline void *cuda_device_malloc(trusimd_hardware *h_, size_t n) {
   cuda_error_type = CUDART_ERROR;
+  void *res;
+#if CUDART_VERSION >= 11200
   trusimd_hardware &h = *h_;
   cudaStream_t s;
   if (cuda_retrieve_defaults(&s, &h) == -1) {
     return NULL;
   }
-  void *res;
   cuda_errno = cudaMallocAsync(&res, n, s);
+#else
+  (void)h_;
+  cuda_errno = cudaMalloc(&res, n);
+#endif
   if (cuda_errno != cudaSuccess) {
     res = NULL;
     trusimd_errno = TRUSIMD_ECUDA;
@@ -274,12 +302,17 @@ static inline void *cuda_device_malloc(trusimd_hardware *h_, size_t n) {
 
 static inline void cuda_device_free(trusimd_hardware *h_, void *ptr) {
   cuda_error_type = CUDART_ERROR;
+#if CUDART_VERSION >= 11200
   trusimd_hardware &h = *h_;
   cudaStream_t s;
   if (cuda_retrieve_defaults(&s, &h) == -1) {
     return;
   }
   cuda_errno = cudaFreeAsync(ptr, s);
+#else
+  (void)h_;
+  cuda_errno = cudaFree(ptr);
+#endif
   if (cuda_errno != cudaSuccess) {
     trusimd_errno = TRUSIMD_ECUDA;
   }
