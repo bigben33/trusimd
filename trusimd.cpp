@@ -273,12 +273,17 @@ static inline void print(PrintLang lang, kernel *k, const char *fmt, ...) {
         break;
       }
       case 'V': {
-        if (lang == IRVec || lang == IRSca) {
+        int var_num = va_arg(ap, int);
+        if (lang == IRVec ||
+            (lang == IRSca &&
+             std::find(k->args_vars.begin(), k->args_vars.end(), var_num) !=
+                 k->args_vars.end())) {
           buf += "%v";
+        } else if (lang == IRSca) {
+          buf += "%s";
         } else {
           buf.push_back('v');
         }
-        int var_num = va_arg(ap, int);
         print_T(&buf, var_num);
         break;
       }
@@ -512,9 +517,7 @@ kernel *trusimd_create_kernel_ap(const char *name, va_list ap) {
     res->next_var = -1;
     res->c_indentation = 0;
     res->ir_indentation = 0;
-    print(IRVec, res, "define void @S(i64 %size", name);
-    print(IRSca, res, "define void @S(i64 %i, i64 %size, i8* %args) {\n\n",
-          name);
+    print(IRVec, res, "define void @S(i64 %size, i8* %args) {\n\n", name);
     res->ir_indentation = 2;
     print(CU, res, "__kernel__ void S(int size", name);
     print(CL, res, "__kernel void S(int size", name);
@@ -531,8 +534,7 @@ kernel *trusimd_create_kernel_ap(const char *name, va_list ap) {
       res->expr[nv] = "v";
       res->args_vars.push_back(nv);
       print_T(&(res->expr[nv]), nv);
-      print(IRVec, res, ", T V", t, nv);
-      print(IRSca, res,
+      print(IRVec, res,
             "|V = getelementptr inbounds i8, i8* %args, i64 D\n"
             "|V = bitcast i8* V to T*\n"
             "|V = load T, T* V\n\n",
@@ -545,28 +547,25 @@ kernel *trusimd_create_kernel_ap(const char *name, va_list ap) {
     print_T(&(res->expr[gid_var]), gid_var);
     res->global_index_var = gid_var;
     print(IRVec, res,
-          ") {\n\n"
           "  %global_index_ptr = alloca i64\n"
           "  store i64 0, i64* %global_index_ptr\n"
-          "  br label %for_cond\n\n"
-          "for_cond:\n\n"
+          "  br label %for_vec_cond\n\n"
+          "for_vec_cond:\n\n"
           "  V = load i64, i64* %global_index_ptr\n"
           "  %ipn = add i64 V, ??????????\n"
-          "  %b = icmp sgt i64 %ipn, %size\n"
-          "  br i1 %b, label %for_exit, label %for_body\n\n"
-          "for_body:\n\n",
+          "  %b_vec = icmp sgt i64 %ipn, %size\n"
+          "  br i1 %b_vec, label %for_sca_cond, label %for_vec_body\n\n"
+          "for_vec_body:\n\n",
           gid_var, gid_var);
     print(IRSca, res,
-          "  %global_index_ptr = alloca i64\n"
-          "  store i64 %i, i64* %global_index_ptr\n"
-          "  br label %for_cond\n\n"
-          "for_cond:\n\n"
+          "\n"
+          "for_sca_cond:\n\n"
           "  V = load i64, i64* %global_index_ptr\n"
-          "  %b = icmp sge i64 V, %size\n"
-          "  br i1 %b, label %for_exit, label %for_body\n\n"
-          "for_body:\n\n",
+          "  %b_sca = icmp sge i64 V, %size\n"
+          "  br i1 %b_sca, label %for_sca_exit, label %for_sca_body\n\n"
+          "for_sca_body:\n\n",
           gid_var, gid_var);
-    // convenient but not opttimized
+    // convenient but not optimized
     res->type_pos.push_back(res->llvm_ir_vec.find("??????????"));
     print(
         CU, res,
@@ -604,20 +603,19 @@ kernel *trusimd_create_kernel(const char *name, ...) {
 void trusimd_end_kernel(kernel *k) {
   k->c_indentation = 0;
   k->ir_indentation = 0;
-  print(IRVec, k,
-        "  store i64 %ipn, i64* %global_index_ptr\n"
-        "  br label %for_cond\n\n"
-        "for_exit:\n\n"
-        "  ret void\n\n"
-        "}\n");
   print(IRSca, k,
         "  %ip1 = add nsw i64 V, 1\n"
         "  store i64 %ip1, i64* %global_index_ptr\n"
-        "  br label %for_cond\n\n"
-        "for_exit:\n\n"
-        "  ret void\n\n"
-        "}\n",
+        "  br label %for_sca_cond\n\n"
+        "for_sca_exit:\n\n"
+        "  ret void\n\n",
         k->global_index_var);
+  print(IRVec, k,
+        "  store i64 %ipn, i64* %global_index_ptr\n"
+        "  br label %for_vec_cond\n\n"
+        "S"
+        "}\n",
+        k->llvm_ir_sca.c_str());
   print(CU, k, "}\n");
   print(CL, k, "}\n");
 }

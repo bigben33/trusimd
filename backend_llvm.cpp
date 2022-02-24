@@ -12,6 +12,7 @@
 #include <llvm/ExecutionEngine/GenericValue.h>
 #include <llvm/ExecutionEngine/Orc/LLJIT.h>
 #include <llvm/ExecutionEngine/Orc/ThreadSafeModule.h>
+#include <llvm/Passes/PassBuilder.h>
 
 // ----------------------------------------------------------------------------
 
@@ -27,6 +28,7 @@ static inline int llvm_poll(std::vector<trusimd_hardware> *v) {
   }
   const char *known_features[] = {"sse",    "sse2", "sse3", "ssse3", "sse4.1",
                                   "sse4.2", "avx",  "avx2", "neon",  "asimd"};
+  const int simd_width[] = {128, 128, 128, 128, 128, 128, 256, 256, 128, 128};
   for (int i = 0; i < int(sizeof(known_features) / sizeof(const char *));
        i++) {
     if (features.find(known_features[i]) != features.end()) {
@@ -35,6 +37,8 @@ static inline int llvm_poll(std::vector<trusimd_hardware> *v) {
       buf += ' ';
       buf += known_features[i];
       trusimd_hardware h;
+      strcpy(h.id, known_features[i]);
+      memcpy((void *)h.param1, (void *)&simd_width[i], sizeof(int));
       h.accelerator = TRUSIMD_LLVM;
       my_strlcpy(h.description, buf.c_str(), sizeof(h.description));
       v->push_back(h);
@@ -79,13 +83,31 @@ int llvm_copy_to_host(trusimd_hardware *, void *dst, void *src, size_t n) {
 
 // ----------------------------------------------------------------------------
 
+static inline void llvm_ir_replace(std::string *s_, size_t pos,
+                                   std::string const &r) {
+  std::string &s = *s_;
+  for (size_t i = 0; i < r.size(); i++) {
+    s[pos + i] = r[i];
+  }
+}
+
 static inline int llvm_compile_run(trusimd_hardware *h_, kernel *k, int n,
                                    va_list ap) {
   using namespace llvm;
   trusimd_hardware &h = *h_;
-  (void)h;
 
-  std::cout << k->llvm_ir_sca << std::endl;
+  // TODO: First we set the vector width
+  // In the meantime we assume floats/int... so we take simd_width / 4
+  std::string buf;
+  int simd_length;
+  memcpy((void *)&simd_length, (void *)h.param1, sizeof(int));
+  simd_length /= 32;
+  print_T(&buf, simd_length);
+  buf += std::string(10 /* 10 = sizeof("??????????") */ - buf.size(), ' ');
+  for (size_t i = 0; i < k->type_pos.size(); i++) {
+    llvm_ir_replace(&k->llvm_ir_vec, k->type_pos[i], buf);
+  }
+  //std::cout << k->llvm_ir_vec << std::endl;
 
   // This is mandatory (once is enough though)
   InitializeNativeTarget();
@@ -95,7 +117,7 @@ static inline int llvm_compile_run(trusimd_hardware *h_, kernel *k, int n,
 
   // LLVM object that represents the LLVM IR
   std::unique_ptr<MemoryBuffer> ir =
-      MemoryBuffer::getMemBuffer(k->llvm_ir_sca.c_str());
+      MemoryBuffer::getMemBuffer(k->llvm_ir_vec.c_str());
 
   // Parse the LLVM IR
   SMDiagnostic diag;
@@ -112,6 +134,30 @@ static inline int llvm_compile_run(trusimd_hardware *h_, kernel *k, int n,
     trusimd_errno = TRUSIMD_ELLVM;
     return -1;
   }
+
+  // Create the analysis managers.
+  LoopAnalysisManager LAM;
+  FunctionAnalysisManager FAM;
+  CGSCCAnalysisManager CGAM;
+  ModuleAnalysisManager MAM;
+
+  // Create the new pass manager builder.
+  PassBuilder PB;
+
+  // Register all the basic analyses with the managers.
+  PB.registerModuleAnalyses(MAM);
+  PB.registerCGSCCAnalyses(CGAM);
+  PB.registerFunctionAnalyses(FAM);
+  PB.registerLoopAnalyses(LAM);
+  PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+
+  // Create the pass manager.
+  // This one corresponds to a typical -O3 optimization pipeline.
+  ModulePassManager MPM =
+      PB.buildPerModuleDefaultPipeline(PassBuilder::OptimizationLevel::O3);
+
+  // Optimize the IR!
+  MPM.run(*M.get(), MAM);
 
   // Create the JIT engine
   auto JIT = orc::LLJITBuilder().create();
@@ -176,8 +222,10 @@ static inline int llvm_compile_run(trusimd_hardware *h_, kernel *k, int n,
     trusimd_errno = TRUSIMD_ELLVM;
     return -1;
   }
-  auto f = (void (*)(long, long, char *))func.get().getAddress();
-  f(long(0), long(n), &args[0]);
+  auto f = (void (*)(long, char *))func.get().getAddress();
+
+  std::cout << "DEBUG\n";
+  f(long(n), &args[0]);
 
   return 0;
 }

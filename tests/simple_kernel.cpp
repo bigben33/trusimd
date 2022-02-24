@@ -7,7 +7,8 @@ int main(int argc, char **argv) {
 
   // Expect one argument
   if (argc != 2) {
-    std::cerr << argv[0] << ": error: usage: " << argv[0] << "search_string\n";
+    std::cerr << argv[0] << ": error: usage: " << argv[0]
+              << " search_string\n";
     return -1;
   }
 
@@ -42,7 +43,6 @@ int main(int argc, char **argv) {
   // Check result
   a.copy_to_host();
   for (int i = 0; i < n; i++) {
-    std::cout << "DEBUG: " << i << std::endl;
     if (a[i] != b[i] + c[i]) {
       std::cerr << argv[0] << ": error: " << a[i] << " vs. " << (b[i] + c[i])
                 << std::endl;
