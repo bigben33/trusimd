@@ -33,7 +33,7 @@ int main(int argc, char **argv) {
   }
 
   // Print Kernel source code for debugging
-  //std::cout << vector_add << std::endl;
+  std::cout << vector_add << std::endl;
 
   // Copy data to device, compile and execute kernel
   b.copy_to_device();

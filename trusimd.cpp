@@ -567,20 +567,20 @@ kernel *trusimd_create_kernel_ap(const char *name, va_list ap) {
           gid_var, gid_var);
     // convenient but not optimized
     res->type_pos.push_back(res->llvm_ir_vec.find("??????????"));
-    print(
-        CU, res,
-        ") {\n\n"
-        "  int V = (int)(blockDim.x * blockIdx.x + threadIdx.x);\n"
-        "  if (V >= size) {\n"
-        "    return;\n"
-        "  }\n\n",
-        gid_var, gid_var);
+    print(CU, res,
+          ") {\n\n"
+          "  int V = (int)(block\\Dim.x * blockIdx.x + threadIdx.x);\n"
+          "  if (V >= size) {\n"
+          "    return;\n"
+          "  }\n\n",
+          gid_var, gid_var);
     print(CL, res,
-        ") {\n\n"
-        "  int V = (int)get_global_id(0);\n"
-        "  if (V >= size) {\n"
-        "    return;\n"
-        "  }\n\n", res->global_index_var, res->global_index_var);
+          ") {\n\n"
+          "  int V = (int)get_global_id(0);\n"
+          "  if (V >= size) {\n"
+          "    return;\n"
+          "  }\n\n",
+          res->global_index_var, res->global_index_var);
     res->ir_indentation = 2;
     res->c_indentation = 2;
 #ifndef NO_EXCEPTIONS
