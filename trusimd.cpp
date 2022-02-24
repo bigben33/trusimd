@@ -756,7 +756,7 @@ int trusimd_load(kernel *k, int ptr, int offset) {
       print(IRVec, k, "|V = bitcast T* V to T*\n", tmp2, t, tmp, vec_t);
     }
     int nv = pick_next_var(k, vec_t);
-    print(IRVec, k, "|V = load T, T* V\n\n", nv, vec_t, vec_t, tmp2);
+    print(IRVec, k, "|V = load T, T* V, align 1\n\n", nv, vec_t, vec_t, tmp2);
 
     print(IRSca, k, "|V = getelementptr inbounds T, T* V, T V\n", tmp, t, t,
           vptr, offset_t, voffset);
@@ -806,7 +806,7 @@ int trusimd_store(kernel *k, int ptr, int offset, int v) {
       print(IRVec, k, "|V = bitcast T* V to T*\n", tmp2, t, tmp, vec_t);
     }
     int vv = need_ir_var(k, v);
-    print(IRVec, k, "|store T V, T* V\n\n", vec_t, vv, vec_t, tmp2);
+    print(IRVec, k, "|store T V, T* V, align 1\n\n", vec_t, vv, vec_t, tmp2);
 
     print(IRSca, k, "|V = getelementptr inbounds T, T* V, T V\n", tmp, t, t,
           vptr, offset_t, voffset);

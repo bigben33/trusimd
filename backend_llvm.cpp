@@ -107,7 +107,7 @@ static inline int llvm_compile_run(trusimd_hardware *h_, kernel *k, int n,
   for (size_t i = 0; i < k->type_pos.size(); i++) {
     llvm_ir_replace(&k->llvm_ir_vec, k->type_pos[i], buf);
   }
-  //std::cout << k->llvm_ir_vec << std::endl;
+  std::cout << k->llvm_ir_vec << std::endl;
 
   // This is mandatory (once is enough though)
   InitializeNativeTarget();
@@ -223,8 +223,6 @@ static inline int llvm_compile_run(trusimd_hardware *h_, kernel *k, int n,
     return -1;
   }
   auto f = (void (*)(long, char *))func.get().getAddress();
-
-  std::cout << "DEBUG\n";
   f(long(n), &args[0]);
 
   return 0;
