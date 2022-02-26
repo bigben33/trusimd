@@ -24,17 +24,19 @@ module trusimd
 
 contains
 
+  ! ---------------------------------------------------------------------------
+  ! strlen function to get C-string length
   function c_strlen(s) result(l)
     type(c_ptr), intent(in) :: s
     integer :: l
     interface
       function c_strlen_(s_) result(l_) bind(c, name="strlen")
         import
-        type(c_ptr), intent(in) :: s_
+        type(c_ptr), value :: s_
         integer(kind=c_size_t) :: l_
       end function
     end interface
-    l = c_strlen_(s)
+    l = int(c_strlen_(s))
   end function
 
   ! ---------------------------------------------------------------------------
@@ -47,12 +49,12 @@ contains
       function c_trusimd_strerror(code_) result(s_) &
                bind(c, name="trusimd_strerror")
         import
-        integer(kind=c_int), intent(in) :: code_
+        integer(kind=c_int), value :: code_
         type(c_ptr) :: s_
       end function
     end interface
     type(c_ptr) :: s_
-    s_ = c_trusimd_strerror(code)
+    s_ = c_trusimd_strerror(int(code, kind=c_int))
     call c_f_pointer(s_, s, [c_strlen(s_)])
   end function
 
@@ -63,9 +65,9 @@ contains
   ! ---------------------------------------------------------------------------
   ! Hardware abstraction
 
-  subroutine trusimd_poll(ptr, n)
+  function trusimd_poll(ptr) result(n)
     type(trusimd_hardware), pointer, intent(out) :: ptr(:)
-    integer, intent(out) :: n
+    integer :: n
     interface
       function c_trusimd_poll(ptr_) result(n_) bind(c, name="trusimd_poll")
         import
@@ -74,8 +76,11 @@ contains
       end function
     end interface
     type(c_ptr) :: ptr_
-    n = c_trusimd_poll(ptr_)
+    n = int(c_trusimd_poll(ptr_))
+    if (n == -1) then
+      return
+    end if
     call c_f_pointer(ptr_, ptr, [n])
-  end subroutine
+  end function
 
 end module trusimd

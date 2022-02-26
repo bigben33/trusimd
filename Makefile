@@ -3,7 +3,7 @@ CXX      = g++ -static-libgcc
 FC       = gfortran
 ROOT     = .
 CXXFLAGS = -Wall -Wextra -pedantic -O3 -g
-FFLAGS   = -O3 -g
+FFLAGS   = $(CXXFLAGS)
 LDFLAGS  = -std=f2008 -pedantic
 
 # -----------------------------------------------------------------------------

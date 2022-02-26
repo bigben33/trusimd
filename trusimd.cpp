@@ -643,6 +643,8 @@ const char *trusimd_strerror(int code) {
   switch(code) {
   case TRUSIMD_NOERR:
     return "Success";
+  case TRUSIMD_ENOMEM:
+    return "Out of memory";
   case TRUSIMD_ETYPE:
     return "Wrong type";
   case TRUSIMD_EINDEX:
