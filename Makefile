@@ -1,9 +1,10 @@
 PREFIX   = /usr
 CXX      = g++ -static-libgcc
-BUILD    = .
+FC       = gfortran
 ROOT     = .
 CXXFLAGS = -Wall -Wextra -pedantic -O3 -g
-LDFLAGS  =
+FFLAGS   = -O3 -g
+LDFLAGS  = -std=f2008 -pedantic
 
 # -----------------------------------------------------------------------------
 
@@ -11,46 +12,62 @@ LDFLAGS  =
 .DEFAULT:
 .SUFFIXES:
 
-# -----------------------------------------------------------------------------
-# Compilation of the library
+all: libtrusimd.so trusimd.o trusimd.mod
 
-$(BUILD)/libtrusimd.so: $(ROOT)/trusimd.cpp $(ROOT)/trusimd.h
+# -----------------------------------------------------------------------------
+# Compilation of the library (C++ and Fortran module)
+
+libtrusimd.so: $(ROOT)/trusimd.cpp $(ROOT)/trusimd.h
 	$(CXX) $(CXXFLAGS) -fPIC -shared $(ROOT)/trusimd.cpp $(LDFLAGS) -o $@
 
-clean:
-	rm -f $(BUILD)/libtrusimd.so
+trusimd.o: $(ROOT)/trusimd.f90 libtrusimd.so
+	$(FC) $(FFLAGS) -c $(ROOT)/trusimd.f90
 
-install: $(BUILD)/libtrusimd.so $(ROOT)/trusimd.h $(ROOT)/trusimd.hpp
+clean:
+	rm -f libtrusimd.so
+
+install: libtrusimd.so $(ROOT)/trusimd.h $(ROOT)/trusimd.hpp
 	mkdir -p ${PREFIX}
-	cp $(BUILD)/libtrusimd.so ${PREFIX}/lib
+	cp libtrusimd.so ${PREFIX}/lib
 	cp $(ROOT)/trusimd.h $(ROOT)/trusimd.hpp ${PREFIX}/include
 
 # -----------------------------------------------------------------------------
 # C++ tests
 
-ELDFLAGS  = $(LDFLAGS) -L$(BUILD) -ltrusimd -Wl,-rpath=$(BUILD)
-ECXXFLAGS = $(CXXFLAGS) -I$(ROOT)
-TARGETS = $(BUILD)/libtrusimd.so $(ROOT)/trusimd.h $(ROOT)/trusimd.hpp
+ELDFLAGS   = $(LDFLAGS) -L. -ltrusimd -Wl,-rpath='$$ORIGIN'
+ECXXFLAGS  = $(CXXFLAGS) -I$(ROOT)
+EFFLAGS    = $(FFLAGS) -I. trusimd.o
+CXXTARGETS = libtrusimd.so $(ROOT)/trusimd.hpp
+FTARGETS   = trusimd.o
 
-$(BUILD)/simple_kernel: $(ROOT)/tests/simple_kernel.cpp $(TARGETS)
+simple_kernel_cpp: $(ROOT)/tests/simple_kernel.cpp $(CXXTARGETS)
 	$(CXX) $(ECXXFLAGS) $(ROOT)/tests/simple_kernel.cpp $(ELDFLAGS) -o $@
 
-$(BUILD)/poll_hardware: $(ROOT)/tests/poll_hardware.cpp $(TARGETS)
+poll_hardware_cpp: $(ROOT)/tests/poll_hardware.cpp $(CXXTARGETS)
 	$(CXX) $(ECXXFLAGS) $(ROOT)/tests/poll_hardware.cpp $(ELDFLAGS) -o $@
+
+# -----------------------------------------------------------------------------
+# Fortran tests
+
+simple_kernel_f90: $(ROOT)/tests/simple_kernel.f90 $(FTARGETS)
+	$(FC) $(EFFLAGS) $(ROOT)/tests/simple_kernel.f90 $(ELDFLAGS) -o $@
+
+poll_hardware_f90: $(ROOT)/tests/poll_hardware.f90 $(FTARGETS)
+	$(FC) $(EFFLAGS) $(ROOT)/tests/poll_hardware.f90 $(ELDFLAGS) -o $@
 
 # -----------------------------------------------------------------------------
 # Python tests
 
-$(BUILD)/trusimd.py: $(ROOT)/trusimd.py $(BUILD)/libtrusimd.so
+trusimd.py: $(ROOT)/trusimd.py libtrusimd.so
 	cp -f $(ROOT)/trusimd.py $@
 
-$(BUILD)/poll_hardware.py: $(ROOT)/tests/poll_hardware.py $(BUILD)/trusimd.py
+poll_hardware.py: $(ROOT)/tests/poll_hardware.py trusimd.py
 	cp -f $(ROOT)/tests/poll_hardware.py $@
 
-$(BUILD)/simple_kernel.py: $(ROOT)/tests/simple_kernel.py $(BUILD)/trusimd.py
+simple_kernel.py: $(ROOT)/tests/simple_kernel.py trusimd.py
 	cp -f $(ROOT)/tests/simple_kernel.py $@
 
 # -----------------------------------------------------------------------------
 
-tests: $(BUILD)/simple_kernel $(BUILD)/poll_hardware \
-       $(BUILD)/simple_kernel.py $(BUILD)/poll_hardware.py
+tests: simple_kernel_cpp poll_hardware_cpp simple_kernel.py poll_hardware.py \
+       simple_kernel_f90 poll_hardware_f90

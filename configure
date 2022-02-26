@@ -5,24 +5,25 @@
 
 DIRNAME=`dirname $0`
 ROOT=`realpath ${DIRNAME}`
-BUILD=`realpath ${PWD}`
 PREFIX=/usr
 CXX=${CXX:-c++}
+FC=${FC:-gfortran}
 CXXFLAGS=${CXXFLAGS:--O3 -g -Wall -Wextra -pedantic}
+FFLAGS=${FFLAGS:--O3 -g -std=f2008 -pedantic}
 LDFLAGS=${LDFLAGS}
 NO_EXCEPTIONS="NO"
 WITH_LLVM="DEFAULT"
 WITH_OPENCL="DEFAULT"
 WITH_CUDA="/usr/local/cuda"
 
-VAR_LIST="ROOT BUILD PREFIX CXX CXXFLAGS LDFLAGS"
+VAR_LIST="ROOT PREFIX FC FFLAGS CXX CXXFLAGS LDFLAGS"
 
 # -----------------------------------------------------------------------------
 # Look for replacements
 
 for a in "$@"; do
   case $a in
-    CXX=*|CXXFLAGS=*|LDFLAGS=*)
+    CXX=*|CXXFLAGS=*|LDFLAGS=*|FC=*|FFLAGS=*)
       eval $a
     ;;
     --prefix=*)
