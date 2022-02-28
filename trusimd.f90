@@ -49,6 +49,27 @@ module trusimd
   type(trusimd_type), parameter :: uint64ptr   = trusimd_type(TRUSIMD_SCALAR, TRUSIMD_UNSIGNED, 64, 1)
   type(trusimd_type), parameter :: float64ptr  = trusimd_type(TRUSIMD_SCALAR, TRUSIMD_FLOAT,    64, 1)
 
+  ! Current kernel
+  type(c_ptr) :: current_kernel
+
+  ! Variable
+  type :: trusimd_var
+    integer :: id
+  end type
+
+  interface operator(+)
+    module procedure trusimd_add
+  end interface
+
+  interface
+    function c_trusimd_get_global_id(k) result(v) &
+             bind(c, name="trusimd_get_global_id")
+      import
+      type(c_ptr), value :: k
+      integer(kind=c_int) :: v
+    end function
+  end interface
+
   ! Hardware C-struct
   type, bind(c) :: c_trusimd_hardware
     character(kind=c_char) :: id(16)
@@ -151,6 +172,89 @@ contains
   ! ---------------------------------------------------------------------------
   ! Variable abstraction
 
+  function trusimd_add(v1, v2) result(w)
+    type(trusimd_var), intent(in) :: v1, v2
+    type(trusimd_var) :: w
+    interface
+      function c_trusimd_add(k, v1_, v2_) result(w_) &
+               bind(c, name="trusimd_add")
+        import
+        type(c_ptr), value :: k
+        integer(kind=c_int), value :: v1_, v2_
+        integer(kind=c_int) :: w_
+      end function
+    end interface
+    w%id = c_trusimd_add(current_kernel, v1%id, v2%id)
+    if (w%id == -1) then
+      print '(2A)', ': error: ', trusimd_strerror(trusimd_errno)
+      stop -1
+    end if
+  end function
+
+  function ld(v) result(w)
+    type(trusimd_var), intent(in) :: v
+    type(trusimd_var) :: w
+    interface
+      function c_trusimd_load(k, v1_, v2_) result(w_) &
+               bind(c, name="trusimd_add")
+        import
+        type(c_ptr), value :: k
+        integer(kind=c_int), value :: v1_, v2_
+        integer(kind=c_int) :: w_
+      end function
+    end interface
+    w%id = c_trusimd_load(current_kernel, v%id, &
+                          c_trusimd_get_global_id(current_kernel))
+    if (w%id == 1) then
+      print '(2A)', ': error: ', trusimd_strerror(trusimd_errno)
+      stop -1
+    end if
+  end function
+
+  subroutine st(w, v)
+    type(trusimd_var), intent(in) :: w, v
+    interface
+      function c_trusimd_store(k, v1_, v2_, v3_) result(w_) &
+               bind(c, name="trusimd_add")
+        import
+        type(c_ptr), value :: k
+        integer(kind=c_int), value :: v1_, v2_, v3_
+        integer(kind=c_int) :: w_
+      end function
+    end interface
+    integer :: code
+    code = c_trusimd_store(current_kernel, w%id, &
+                           c_trusimd_get_global_id(current_kernel), v%id)
+    if (code == 1) then
+      print '(2A)', ': error: ', trusimd_strerror(trusimd_errno)
+      stop -1
+    end if
+  end subroutine
+
+  function arg(i) result(v)
+    integer, intent(in) :: i
+    type(trusimd_var) :: v
+    interface
+      function c_trusimd_nb_kernel_args(k_) result(n_) &
+               bind(c, name="trusimd_nb_kernel_args")
+        import
+        type(c_ptr), value :: k_
+        integer(kind=c_int) :: n_
+      end function
+      function c_arg(k_, i_) result(j_) &
+               bind(c, name="c_trusimd_get_kernel_arg")
+        import
+        type(c_ptr), value :: k_
+        integer(kind=c_int), value :: i_
+        integer(kind=c_int) :: j_
+      end function
+    end interface
+    if (i < 0 .or. i >= c_trusimd_nb_kernel_args(current_kernel)) then
+      print '(A)', ': error: argument number out of range'
+      stop -1
+    end if
+    v%id = c_arg(current_kernel, i)
+  end function
 
   ! ---------------------------------------------------------------------------
   ! Hardware abstraction
@@ -265,5 +369,43 @@ contains
     code = int(c_trusimd_copy_to_device(b%h, b%dev_ptr, b%host_ptr, &
                                         int(b%n, kind=c_size_t)))
   end function
+
+  function trusimd_copy_to_host(b) result(code)
+    type(trusimd_buffer_pair), intent(inout) :: b
+    integer :: code
+    interface
+      function c_trusimd_copy_to_host(h, dst, src, n) result(code_) &
+               bind(c, name="trusimd_copy_to_host")
+        import
+        type(c_ptr), value :: h, dst, src
+        integer(kind=c_size_t), value :: n
+        integer(kind=c_int) :: code_
+      end function
+    end interface
+    code = int(c_trusimd_copy_to_host(b%h, b%host_ptr, b%dev_ptr, &
+                                      int(b%n, kind=c_size_t)))
+  end function
+
+  ! ---------------------------------------------------------------------------
+  ! Kernel abstraction
+
+  subroutine begin_kernel(k, name, args)
+    type(c_ptr), intent(in) :: k
+    character(256), intent(in) :: name
+    type(trusimd_type) :: args(:)
+  end subroutine
+
+  subroutine end_kernel()
+    interface
+      subroutine c_trusimd_end_kernel(k_) bind(c, name="trusimd_end_kernel")
+        import
+        type(c_ptr), value :: k_
+      end subroutine
+    end interface
+    call c_trusimd_end_kernel(current_kernel)
+  end subroutine
+
+  !function run()
+  !end function
 
 end module trusimd

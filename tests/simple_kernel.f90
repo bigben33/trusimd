@@ -5,6 +5,7 @@ program simple_kernel
   ! Variables declaration
   character(256) :: buf, argv1
   character(len=:), allocatable :: argv0
+  real(kind=c_float), dimension(:), pointer :: fort_a, fort_b, fort_c
   integer :: i, n, code
   type(trusimd_hardware) :: h
   type(trusimd_buffer_pair) :: a, b, c
@@ -33,12 +34,15 @@ program simple_kernel
   c = trusimd_buffer_pair(h, n, float32)
 
   ! Fill buffers with numbers
+  call c_f_pointer(b%host_ptr, fort_b, (/ n /))
+  call c_f_pointer(c%host_ptr, fort_c, (/ n /))
   do i = 1, n
-    a.at.i = i
+    fort_b(i) = real(i, kind=c_float)
+    fort_c(i) = real(i, kind=c_float)
   end do
 
   ! Kernel
-  !TODO
+  call st(arg(0), ld(arg(1)) + ld(arg(2)))
 
   ! Print kernel
   !TODO
@@ -54,6 +58,20 @@ program simple_kernel
   end if
 
   ! Check result
-  !TODO
+  if (trusimd_copy_to_host(a) == -1) then
+    print '(3A)', argv0, ': error: ', trim(trusimd_strerror(trusimd_errno))
+    stop -1
+  end if
+  call c_f_pointer(a%host_ptr, fort_a, (/ n /))
+  do i = 1, n
+    if (fort_a(i) /= fort_b(i) + fort_c(i)) then
+      print '(2A, F0.0, A, F0.0)', argv0, ': error: ', fort_a(i), ' vs. ', &
+            (fort_b(i) + fort_c(i))
+      stop -1
+    else
+      print '(2A, F0.0, A, F0.0)', argv0, ': error: ', fort_a(i), ' --> ', &
+            (fort_b(i) + fort_c(i))
+    end if
+  end do
 
 end program simple_kernel
