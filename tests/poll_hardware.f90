@@ -10,7 +10,7 @@ program poll_hardware
   end if
 
   do i = 1, size(hardwares)
-    print '(256A)', hardwares(i) % description
+    print '(256A)', hardwares(i)%description
   end do
 
 end program poll_hardware
