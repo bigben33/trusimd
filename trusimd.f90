@@ -235,4 +235,17 @@ contains
     call c_free(this%host_ptr)
   end subroutine
 
+  function trusimd_copy_to_device(b) result(code)
+    type(trusimd_buffer_pair), pointer, intent(inout) :: h
+    integer :: code
+    interface
+      function c_trusimd_copy_to_device(h_, dst, src, n) result(code_)
+        type(c_ptr), value :: h_, dst, src
+        integer(kind=c_size_t), value :: n
+        integer(kind=c_int) :: code_
+      end function
+    end interface
+    code = c_trusimd_copy_to_device(b%h, b%dev_ptr, b%host_ptr, n)
+  end function
+
 end module trusimd
